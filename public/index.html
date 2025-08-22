@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Catalyst Proposal Viewer</title>
+
+  <!-- Meta Tags for Social Media -->
+  <meta name="description" content="A viewer for Project Catalyst proposals, built by GameChanger.Finance">
+  <meta property="og:title" content="Project Catalyst Proposal Viewer">
+  <meta property="og:description" content="A viewer for Project Catalyst proposals, built by GameChanger.Finance">
+  <!-- <meta property="og:image" content="https://your-website.com/path/to/image.jpg"> -->
+  <!-- <meta property="og:url" content="https://your-website.com"> -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Project Catalyst Proposal Viewer">
+  <meta name="twitter:description" content="A viewer for Project Catalyst proposals, built by GameChanger.Finance">   
+  <!-- End of Meta Tags for Social Media -->  
+
+  <!-- TailwindCSS CDN for quick, modern styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Marked for Markdown support -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- DOMPurify to sanitize Markdown HTML -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { background: #0b0f17; }
+    footer { background: #0b0f17; font-size: 0.8em;}
+    .glass { background: rgba(255,255,255,0.04); backdrop-filter: saturate(140%) blur(8px); }
+    .dropzone.dragover { outline: 2px dashed #93c5fd; background: rgba(59,130,246,0.1); }
+    .prose h1 {font-size: 1.6em; margin-top: 24px;padding-bottom: 6px;}
+    .prose a {color:#93c5fd;text-decoration: underline;}
+    .prose img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+    .code-json { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 0.85rem; white-space: pre-wrap; }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen">
+  <div class="flex flex-col md:flex-row h-screen">
+    <!-- Sidebar -->
+    <aside class="w-full md:w-80 border-b md:border-b-0 md:border-r border-slate-800 p-4 md:p-6 overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h1 class="text-xl font-semibold">Catalyst Project Viewer</h1>
+        <a href="#" id="closeFileBtn" class="text-xs mx-1 px-1 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700">Close</a>
+        <a href="#" id="downloadBtn" class="text-xs mx-1 px-1 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700">Export</a>
+      </div>
+
+      <!-- Upload controls -->
+      <div id="upload-controls" class="space-y-3">
+        <label class="block text-sm text-slate-300">Load JSON file</label>
+        <input id="fileInput" type="file" accept="application/json,.json" class="block w-full text-sm file:mr-4 file:py-2 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-slate-800 file:text-slate-100 hover:file:bg-slate-700" />
+
+        <div id="dropzone" class="dropzone glass rounded-xl p-4 text-center border-2 border-dashed border-slate-700 text-slate-300">
+          <p class="text-sm">Drag & drop JSON here</p>
+          <p class="text-xs text-slate-400">…or click to choose a file</p>
+        </div>
+
+        <div class="text-xs text-slate-400 leading-5">
+          <p>Tips: Use <code>?debug=true</code> to debug. Use <code>?url=your/proposal.json></code> in the URL to load a <em>.json</em> file automatically.</p>
+        </div>
+      </div>
+
+
+      <div  id="project-list" class="hidden" >
+        <hr class="my-4 border-slate-800" />
+        <h2 class="text-sm font-semibold text-slate-300 mb-2">Projects </h2>
+        <ul id="projectList" class="space-y-2 h-20 md:h-full overflow-y-auto"></ul>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 overflow-y-auto p-4 md:p-8">
+      <div id="welcome" class="max-w-3xl mx-auto">
+        <div class="glass rounded-2xl p-6 border border-slate-800">
+          <h2 class="text-2xl font-semibold">Welcome</h2>
+          <p class="text-slate-300 mt-2">Load a Project Catalyst JSON to preview its <code>content</code> in a clean, reader-friendly view. This tool is designed to be resilient to missing or extra fields and supports Markdown, images, and links. Amounts are shown in <strong>ADA</strong>.</p>
+          <ul class="list-disc pl-5 text-slate-300 mt-3">
+            <li>Click “Load JSON file” or drag & drop a file.</li>
+            <li>If the JSON contains multiple projects, they’ll appear in the left sidebar.</li>
+            <li>Add <code>?debug=true</code> to your URL to show raw <code>metadata</code> (when present).</li>
+          </ul>
+          <p class="text-slate-300 mt-2">Created by <strong><a href="https://gamechanger.finance/" target="_blank" rel="noopener noreferrer">GameChanger Finance</a></strong>, sponsored by <strong><a href="https://www.webbridges.io/" target="_blank" rel="noopener noreferrer">WebBridges</a></strong>.</p>
+        </div>
+      </div>
+
+      <div id="contentRoot" class="hidden max-w-5xl mx-auto">
+        <header class="mb-6">
+          <h1 id="projectTitle" class="text-3xl font-bold tracking-tight"></h1>
+          <p id="projectSubtitle" class="text-slate-400 mt-1"></p>
+        </header>
+
+        <section id="metaBadges" class="flex flex-wrap gap-2 mb-6"></section>
+
+        <article id="projectBody" class="space-y-5"></article>
+
+        <section id="metadataDebug" class="mt-10 hidden">
+          <h3 class="text-lg font-semibold mb-2">Raw metadata</h3>
+          <pre class="code-json bg-slate-900/50 border border-slate-800 rounded-xl p-4"></pre>
+        </section>
+      </div>
+    </main>
+    <footer style="position: fixed;bottom: 0px;width: 100%; background-color: #0b0f17;">
+      <div  style="display: block;width: 100%;text-align: center;" class="text-slate-300 mt-2">Created by <strong><a href="https://gamechanger.finance/" target="_blank" rel="noopener noreferrer">GameChanger Finance</a></strong>, sponsored by <strong><a href="https://www.webbridges.io/" target="_blank" rel="noopener noreferrer">WebBridges</a></strong>.</div>
+    </footer>
+  </div>
+
+  <script>
+    const $ = (sel, el=document) => el.querySelector(sel);
+    const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+    const params = new URLSearchParams(location.search);
+    const DEBUG = params.get('debug') === 'true';
+    const URL   = params.get('url') || 'example.json';
+    let isFileLoaded = false;
+
+    // Configure marked for safe-ish rendering; DOMPurify will sanitize
+    marked.setOptions({
+      gfm: true,
+      breaks: true,
+    });
+
+    const isUrl = (s) => typeof s === 'string' && /^(https?:)\/\//i.test(s);
+    const niceKey = (k) => (k || '').replace(/_/g, ' ').replace(/[A-Z]/g, m => ' ' + m).replace(/\s+/g, ' ').replace(/^./, c => c.toUpperCase()).trim();
+    const currencyKeys = ['budget','cost','costs','requestedFunds','amount','price','ada','funding','delivery_month'];
+
+    const formatAda = (val) => {
+      if (typeof val !== 'number') return String(val);
+      return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(val) + ' ADA';
+    };
+
+    function guessTitle(content) {
+      return (        
+        content?.setup?.title?.title 
+        // ||
+        // content?.title ||
+        // content?.name ||
+        // content?.summary?.title ||
+        // content?.pitch?.team?.who ? 'Project' : 'Untitled Project'
+      );
+    }
+
+    function guessSubtitle(content) {
+      const proposer = content?.setup?.proposer?.applicant || content?.proposer || null;
+      const theme = content?.theme?.theme?.grouped_tag?.group || content?.theme || null;
+      const tag = content?.theme?.theme?.grouped_tag?.tag || null;
+      const parts = [];
+      if (proposer) parts.push(proposer);
+      if (theme && tag) parts.push(`${theme} • ${tag}`);
+      else if (theme) parts.push(theme);
+      return parts.join(' — ');
+    }
+
+    function sanitize(html){ return DOMPurify.sanitize(html, { ADD_ATTR: ['target'], ADD_TAGS: ['iframe'] }); }
+
+    function renderMarkdown(str) {
+      try {
+        const html = marked.parse(String(str));
+        return sanitize(html);
+      } catch (e) {
+        return `<pre class="code-json">${escapeHtml(String(str))}</pre>`;
+      }
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/[&<>\"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[m]));
+    }
+
+    function renderValue(key, value) {
+      const section = document.createElement('section');
+      section.className = 'glass rounded-2xl p-5 border border-slate-800';
+
+      if (key) {
+        const h = document.createElement('h3');
+        h.className = 'text-lg font-semibold mb-3';
+        h.textContent = niceKey(key);
+        section.appendChild(h);
+      }
+
+      if (typeof value === 'boolean') {
+        const span = document.createElement('span');
+        span.textContent = value?'Yes':'No';
+        section.appendChild(span);
+        return section;
+      }
+
+      if (value === null) {
+        const p = document.createElement('p');
+        p.className = 'text-slate-400';
+        p.textContent = '—';
+        section.appendChild(p);
+        return section;
+      }
+
+      if (typeof value === 'string') {
+        if (isUrl(value)) {
+          const a = document.createElement('a');
+          a.href = value; a.target = '_blank'; a.rel = 'noopener';
+          a.className = 'text-sky-300 hover:underline break-words';
+          a.textContent = value;
+          section.appendChild(a);
+        } else {
+          const div = document.createElement('div');
+          div.className = 'prose prose-invert max-w-none';
+          div.innerHTML = renderMarkdown(value);
+          // Ensure links open in new tab
+          $$("a", div).forEach(a => { a.target = '_blank'; a.rel='noopener'; });
+          section.appendChild(div);
+        }
+        return section;
+      }
+
+
+      if (typeof value === 'number') {
+        // Heuristic: show ADA for known keys
+        const span = document.createElement('span');
+        if (currencyKeys.includes((key||'').toLowerCase())) {
+          span.textContent = formatAda(value);
+        } else {
+          span.textContent = String(value);
+        }
+        section.appendChild(span);
+        return section;
+      }
+
+      if (Array.isArray(value)) {
+        if (value.length === 0) {
+          const p = document.createElement('p'); p.className='text-slate-400'; p.textContent='—'; section.appendChild(p); return section;
+        }
+        // Strings -> list; Objects -> cards
+        const container = document.createElement('div');
+        container.className = 'space-y-3';
+        if (value.every(v => typeof v === 'string')) {
+          const ul = document.createElement('ul');
+          ul.className = 'list-disc pl-5 space-y-1';
+          value.forEach(s => {
+            const li = document.createElement('li');
+            if (isUrl(s)) {
+              const a = document.createElement('a'); a.href=s; a.target='_blank'; a.rel='noopener'; a.className='text-sky-300 hover:underline break-words'; a.textContent=s; li.appendChild(a);
+            } else {
+              const div = document.createElement('div'); div.className='prose prose-invert max-w-none'; div.innerHTML = renderMarkdown(s); li.appendChild(div);
+            }
+            ul.appendChild(li);
+          });
+          container.appendChild(ul);
+        } else {
+          value.forEach((item, idx) => {
+            const inner = renderValue(item?.title || `Item ${idx+1}`, item);
+            container.appendChild(inner);
+          });
+        }
+        section.appendChild(container);
+        return section;
+      }
+
+      if (typeof value === 'object') {
+        const grid = document.createElement('div');
+        grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+        Object.entries(value).forEach(([k, v]) => {
+          const card = document.createElement('div');
+          card.className = 'glass rounded-xl p-4 border border-slate-800';
+
+          const h = document.createElement('h4');
+          h.className = 'text-sm font-semibold mb-2 text-slate-200';
+          h.textContent = niceKey(k);
+          card.appendChild(h);
+
+          if (typeof v === 'string') {
+            const md = document.createElement('div');
+            md.className = 'prose prose-invert max-w-none text-sm';
+            md.innerHTML = renderMarkdown(v);
+            $$("a", md).forEach(a => { a.target = '_blank'; a.rel='noopener'; });
+            card.appendChild(md);
+          } else if (Array.isArray(v)) {
+            const sub = renderValue('', v);
+            card.appendChild(sub.firstChild || sub);
+          } else if (typeof v === 'number') {
+            const p = document.createElement('p');
+            p.className='text-sm';
+            p.textContent = currencyKeys.includes(k.toLowerCase()) ? formatAda(v) : String(v);
+            card.appendChild(p);
+          } else if (v && typeof v === 'object') {
+            // Recurse one level nicely
+            Object.entries(v).forEach(([kk, vv]) => {
+              const row = document.createElement('div');
+              row.className = 'mb-3 last:mb-0';
+              const label = document.createElement('div');
+              label.className = 'text-xs text-slate-400';
+              label.textContent = niceKey(kk);
+              row.appendChild(label);
+              if (typeof vv === 'string') {
+                const md = document.createElement('div');
+                md.className = 'prose prose-invert max-w-none text-sm';
+                md.innerHTML = renderMarkdown(vv);
+                $$("a", md).forEach(a => { a.target = '_blank'; a.rel='noopener'; });
+                row.appendChild(md);
+              } else if (typeof vv === 'boolean') {
+                const sub = renderValue('', vv);                 
+                row.appendChild(sub);                              
+              } else if (typeof vv === 'number') {
+                const p = document.createElement('p'); p.className='text-sm'; p.textContent = currencyKeys.includes(kk.toLowerCase()) ? formatAda(vv) : String(vv); row.appendChild(p);
+              } else if (Array.isArray(vv)) {
+                const sub = renderValue('', vv); row.appendChild(sub.firstChild || sub);
+              } else if (vv && typeof vv === 'object') {
+                const sub = renderValue('', vv); row.appendChild(sub);
+              } else {
+                const p = document.createElement('p'); p.className='text-sm text-slate-400'; p.textContent='—'; row.appendChild(p);
+              }
+              card.appendChild(row);
+            });
+          } else {
+            const p = document.createElement('p'); p.className='text-sm text-slate-400'; p.textContent='—'; card.appendChild(p);
+          }
+
+          grid.appendChild(card);
+        });
+        section.appendChild(grid);
+        return section;
+      }
+
+      const p = document.createElement('p'); p.textContent = String(value); section.appendChild(p); return section;
+    }
+
+    function buildBadges(content) {
+      const badges = [];
+      const duration = content?.summary?.time?.duration;
+      if (typeof duration === 'number') badges.push({ label: duration + ' months', title: 'Duration' });
+
+      const funds = content?.summary?.budget?.requestedFunds;
+      if (typeof funds === 'number') badges.push({ label: formatAda(funds), title: 'Requested Funds' });
+
+      const lang = content?.summary?.translation?.originalLanguage;
+      if (lang) badges.push({ label: lang.toUpperCase?.() || String(lang), title: 'Language' });
+
+      const isOpenSource=!!content?.summary?.open_source?.isOpenSource
+      const license = content?.summary?.open_source?.licenseInformation || content?.campaign_category?.category_questions?.license_information;
+      if (isOpenSource) badges.push({ label: isOpenSource?'Open Source':'Not Open Source', title: license });
+
+      return badges;
+    }
+
+    function renderProject(rootObj) {
+      const content = rootObj?.content ?? rootObj ?? {};
+      $('#welcome').classList.add('hidden');
+      $('#contentRoot').classList.remove('hidden');
+
+      // Title & subtitle
+      $('#projectTitle').textContent = guessTitle(content);
+      $('#projectSubtitle').textContent = guessSubtitle(content);
+
+      // Badges
+      const badges = buildBadges(content);
+      const badgeWrap = $('#metaBadges');
+      badgeWrap.innerHTML = '';
+      badges.forEach(b => {
+        const el = document.createElement('div');
+        el.className = 'px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs';
+        el.title = b.title;
+        el.textContent = b.label;
+        badgeWrap.appendChild(el);
+      });
+
+      // Main body: show all top-level sections within `content`
+      const body = $('#projectBody');
+      body.innerHTML = '';
+
+      if (typeof content === 'object' && !Array.isArray(content)) {
+        Object.entries(content).forEach(([k, v]) => {
+          // Skip very small/technical keys when they add noise
+          if (k === '$schema') return;
+          body.appendChild(renderValue(k, v));
+        });
+      } else {
+        // Fallback
+        body.appendChild(renderValue('Content', content));
+      }
+
+      // Debug metadata
+      const metaSection = $('#metadataDebug');
+      const metaPre = $('#metadataDebug pre');
+      if (DEBUG && rootObj?.metadata) {
+        metaSection.classList.remove('hidden');
+        metaPre.textContent = JSON.stringify(rootObj.metadata, null, 2);
+      } else {
+        metaSection.classList.add('hidden');
+        metaPre.textContent = '';
+      }
+    }
+
+
+
+    function buildProjectList(dataset) {
+      const list = $('#projectList');
+      list.innerHTML = '';
+      const arr = Array.isArray(dataset) ? dataset : [dataset];
+
+      arr.forEach((item, idx) => {
+        const content = item?.content ?? item;
+        const title = guessTitle(content);
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <button class="w-full text-left glass rounded-xl border border-slate-800 hover:border-slate-600 px-3 py-2" data-idx="${idx}">
+            <div class="text-sm font-medium truncate">${escapeHtml(title)}</div>
+            <div class="text-xs text-slate-400 truncate">${escapeHtml(guessSubtitle(content) || '')}</div>
+          </button>
+        `;
+        list.appendChild(li);
+        isFileLoaded=true;
+      });
+
+      if(isFileLoaded){
+        $('#upload-controls').classList.add('hidden');
+        if(arr.length>1) 
+          $('#project-list').classList.remove('hidden');
+      }else{
+        $('#upload-controls').classList.remove('hidden');
+        $('#project-list').classList.add('hidden');   
+      }
+
+      list.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-idx]');
+        if (!btn) return;
+        const idx = Number(btn.dataset.idx);
+        renderProject(arr[idx]);
+      }, { once: false });
+
+      // Auto-select first project
+      if (arr.length > 0) renderProject(arr[0]);
+    }
+
+    // File handling
+    const fileInput = $('#fileInput');
+    const dropzone = $('#dropzone');
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      handleJson(text);
+      fileInput.value='';
+    });
+
+    ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); dropzone.classList.add('dragover'); }));
+    ;['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e)=>{ e.preventDefault(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', async (e) => {
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      handleJson(text);
+    });
+
+    function handleJson(text) {
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        alert('Invalid JSON.');
+        console.error(err);
+        return;
+      }
+      buildProjectList(data);
+    }
+
+
+    $('#closeFileBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      isFileLoaded=false;
+
+      $('#upload-controls').classList.remove('hidden');
+      $('#project-list').classList.add('hidden');   
+      // const projectList = $('#projectList');
+      // projectList.innerHTML = '';
+      $('#welcome').classList.remove('hidden');
+      $('#contentRoot').classList.add('hidden');
+
+    });
+
+    // Minimal client-side "Save Page" (downloads this HTML as-is)
+    $('#downloadBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      const blob = new Blob([document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'catalyst-viewer.html';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Optionally: load an example embedded via <script id="defaultJson" type="application/json"> if present
+    async function preloadExample(url) {      
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const jsonData = await response.json();
+        buildProjectList(jsonData);
+      } catch (error) {
+        console.error("Failed to load JSON:", error);
+      }
+    }
+
+
+    addEventListener("load", (event) => { 
+      if(URL)
+        preloadExample(URL);
+    });
+    
+  </script>
+  
+</body>
+</html>
